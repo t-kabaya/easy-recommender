@@ -120,7 +120,7 @@ class EasyRecommender:
         # Get recommendations
         item_ids, scores = self.model.recommend(
             user_idx, 
-            self.model.user_factors[user_idx:user_idx+1], 
+            self.interaction_matrix[user_idx], 
             N=n_recommendations
         )
         
@@ -186,3 +186,19 @@ class EasyRecommender:
         item_factors = self.model.item_factors[item_idx]
         
         return np.dot(user_factors, item_factors)
+
+
+def preprocess():
+    """
+    Preprocess the input data for the recommender system.
+    This function is a placeholder and should be implemented as needed.
+    """
+    pass
+
+
+def recommend(df: pd.DataFrame, user_features: List[str], item_features: List[str]) -> List[int]:
+    """
+    Generate recommendations for users based on their features and item features.
+    """
+    # Placeholder implementation
+    return df[item_features].idxmax().tolist()
