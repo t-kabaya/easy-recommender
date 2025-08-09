@@ -1,204 +1,114 @@
-"""
-Main recommender class for EasyRecommender
-"""
-
 import pandas as pd
-import numpy as np
 from typing import List, Tuple, Dict, Optional
 from sklearn.preprocessing import MinMaxScaler
 from scipy.sparse import coo_matrix
-import implicit
+from lightfm.data import Dataset
+from lightfm import LightFM
 
 
-class EasyRecommender:
-    """
-    A simple recommendation system using implicit library
-    """
-    
-    def __init__(self, factors: int = 100, regularization: float = 0.01, iterations: int = 15):
-        """
-        Initialize the recommender
-        
-        Args:
-            factors: Number of latent factors
-            regularization: Regularization parameter
-            iterations: Number of iterations
-        """
-        self.model = implicit.als.AlternatingLeastSquares(
-            factors=factors, 
-            regularization=regularization, 
-            iterations=iterations,
-            random_state=123
-        )
-        self.fitted = False
-        self.user_mapping = None
-        self.item_mapping = None
-        
-    def preprocess_data(self, df: pd.DataFrame) -> Dict:
-        """
-        Preprocess the data for recommendation
-        
-        Args:
-            df: DataFrame with user_id, item_id and optional rating
-            
-        Returns:
-            Dictionary containing processed data
-        """
-        # Remove columns with all NaN values
-        df = df.dropna(axis=1, how='all')
-        
-        # Create user and item mappings
-        unique_users = df['user_id'].unique()
-        unique_items = df['item_id'].unique()
-        
-        self.user_mapping = {user: idx for idx, user in enumerate(unique_users)}
-        self.item_mapping = {item: idx for idx, item in enumerate(unique_items)}
-        
-        # Create reverse mappings
-        self.user_reverse_mapping = {idx: user for user, idx in self.user_mapping.items()}
-        self.item_reverse_mapping = {idx: item for item, idx in self.item_mapping.items()}
-        
-        # Map user and item IDs to indices
-        df_mapped = df.copy()
-        df_mapped['user_idx'] = df_mapped['user_id'].map(self.user_mapping)
-        df_mapped['item_idx'] = df_mapped['item_id'].map(self.item_mapping)
-        
-        # Use rating if available, otherwise use 1.0
-        if 'rating' in df.columns:
-            ratings = df_mapped['rating'].values
-        else:
-            ratings = np.ones(len(df_mapped))
-        
-        # Create sparse matrix
-        interaction_matrix = coo_matrix(
-            (ratings, (df_mapped['user_idx'], df_mapped['item_idx'])),
-            shape=(len(unique_users), len(unique_items))
-        ).tocsr()
-        
-        return {
-            'interaction_matrix': interaction_matrix,
-            'user_mapping': self.user_mapping,
-            'item_mapping': self.item_mapping,
-            'original_df': df
-        }
-    
-    def fit(self, df: pd.DataFrame):
-        """
-        Fit the recommender model
-        
-        Args:
-            df: DataFrame with user_id, item_id and optional rating
-        """
-        processed_data = self.preprocess_data(df)
-        
-        # Store the interaction matrix for recommendations
-        self.interaction_matrix = processed_data['interaction_matrix']
-        
-        # Fit model
-        self.model.fit(self.interaction_matrix)
-        self.fitted = True
-        
-    def recommend(self, user_id: int, n_recommendations: int = 10) -> List[Tuple[int, float]]:
-        """
-        Get recommendations for a user
-        
-        Args:
-            user_id: User ID to get recommendations for
-            n_recommendations: Number of recommendations to return
-            
-        Returns:
-            List of (item_id, score) tuples
-        """
-        if not self.fitted:
-            raise ValueError("Model must be fitted before making recommendations")
-            
-        if user_id not in self.user_mapping:
-            raise ValueError(f"User {user_id} not found in training data")
-            
-        user_idx = self.user_mapping[user_id]
-        
-        # Get recommendations
-        item_ids, scores = self.model.recommend(
-            user_idx, 
-            self.interaction_matrix[user_idx], 
-            N=n_recommendations
-        )
-        
-        # Map back to original item IDs
-        recommendations = [
-            (self.item_reverse_mapping[item_idx], score) 
-            for item_idx, score in zip(item_ids, scores)
-        ]
-        
-        return recommendations
-    
-    def similar_items(self, item_id: int, n_similar: int = 10) -> List[Tuple[int, float]]:
-        """
-        Find similar items
-        
-        Args:
-            item_id: Item ID to find similar items for
-            n_similar: Number of similar items to return
-            
-        Returns:
-            List of (item_id, similarity_score) tuples
-        """
-        if not self.fitted:
-            raise ValueError("Model must be fitted before finding similar items")
-            
-        if item_id not in self.item_mapping:
-            raise ValueError(f"Item {item_id} not found in training data")
-            
-        item_idx = self.item_mapping[item_id]
-        
-        # Get similar items
-        similar_items, scores = self.model.similar_items(item_idx, N=n_similar + 1)
-        
-        # Remove the item itself and map back to original IDs
-        similar_items_mapped = [
-            (self.item_reverse_mapping[similar_idx], score)
-            for similar_idx, score in zip(similar_items[1:], scores[1:])
-        ]
-        
-        return similar_items_mapped
-    
-    def predict_score(self, user_id: int, item_id: int) -> float:
-        """
-        Predict score for a user-item pair
-        
-        Args:
-            user_id: User ID
-            item_id: Item ID
-            
-        Returns:
-            Predicted score
-        """
-        if not self.fitted:
-            raise ValueError("Model must be fitted before prediction")
-            
-        if user_id not in self.user_mapping or item_id not in self.item_mapping:
-            return 0.0
-            
-        user_idx = self.user_mapping[user_id]
-        item_idx = self.item_mapping[item_id]
-        
-        user_factors = self.model.user_factors[user_idx]
-        item_factors = self.model.item_factors[item_idx]
-        
-        return np.dot(user_factors, item_factors)
+def build_feature_data(df: pd.DataFrame, target_column_name: str) -> List[Tuple[int, Dict]]:
+    """カテゴリ変数は0.5、連続変数は0-1に正規化して特徴量辞書を生成"""
+    result = []
+    categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+    continuous_cols = df.select_dtypes(include=['int', 'float']).columns.tolist()
+    # user_id, item_idは正規化する必要がないため除外（あれば）
+    continuous_cols.remove(target_column_name)
 
+    # user_id, item_idは正規化する必要がないため除外
+    for col in ['user_id', 'item_id']:
+        if col in continuous_cols:
+            continuous_cols.remove(col)
 
-def preprocess():
+    # 連値を0-1スケーリング
+    if continuous_cols:
+        scaler = MinMaxScaler()
+        df[continuous_cols] = scaler.fit_transform(df[continuous_cols])
+
+    for idx, row in df.iterrows():
+        features = {}
+
+        # カテゴリ変数
+        for col in categorical_cols:
+            val = row[col]
+            if pd.notnull(val):
+                features[f"{col}_{val}"] = 0.5
+
+        # 連続値
+        for col in continuous_cols:
+            features[col] = row[col]
+        id = row[target_column_name]
+
+        result.append((id, features))
+    return result
+
+def preprocess(df: pd.DataFrame, user_features: List[str], item_features: List[str]) -> Tuple[List[int], List[int], List[str], List[str]]:
     """
     Preprocess the input data for the recommender system.
     This function is a placeholder and should be implemented as needed.
     """
-    pass
 
+    df = df.copy()
+
+    # 必要な７種の変数を用意する。
+    all_user_ids = sorted(df['user_id'].unique())
+    all_item_ids = sorted(df['item_id'].unique())
+
+
+    unique_user_features_list = []
+
+    for col in user_features:
+        # NAN二も対応すべくuser_ageのような、target+カラム名のようなケースも考慮する。
+        unique_user_features_list.append(f"{col}")
+        unique_values = df[col].dropna().unique()
+        for val in unique_values:
+            unique_user_features_list.append(f"{col}_{val}")
+
+    unique_item_features_list = []
+
+    for col in item_features:
+        # NAN二も対応すべくuser_ageのような、target+カラム名のようなケースも考慮する。
+        unique_item_features_list.append(f"{col}")
+        unique_values = df[col].dropna().unique()
+        for val in unique_values:
+            unique_item_features_list.append(f"{col}_{val}")
+
+    # DataFrameからuser_idとitem_idのペアを作成。
+    data: List[Tuple[int, int]] = list(zip(df['user_id'], df['item_id']))
+
+    # ユーザー特徴量抽出
+    user_df = df[user_features + ['user_id']]
+    user_features_data = build_feature_data(user_df, 'user_id')
+
+    # アイテム特徴量抽出
+    item_df = df[item_features + ['item_id']]
+    item_features_data = build_feature_data(item_df, 'item_id')
+
+    dataset = Dataset()
+
+    # 全てのユーザー、アイテムをリストアップ。
+    dataset.fit(users=all_user_ids, items=all_item_ids, user_features=unique_user_features_list, item_features=unique_item_features_list)
+    print(dataset)
+
+    interactions, _ = dataset.build_interactions(data=data)
+    print('interactions: ', interactions)
+
+    user_features = dataset.build_user_features(user_features_data)
+    item_features = dataset.build_item_features(item_features_data)
 
 def recommend(df: pd.DataFrame, user_features: List[str], item_features: List[str]) -> List[int]:
     """
     Generate recommendations for users based on their features and item features.
     """
-    # Placeholder implementation
-    return df[item_features].idxmax().tolist()
+    df = df.copy()
+
+    preprocessed_df = preprocessed_df(df, user_features, item_features)
+
+    # モデルの作成
+    model = LightFM(no_components=100, loss="warp", random_state=123)
+
+    # 学習
+    recommends = model.fit(interactions=interactions, user_features=user_features, item_features=item_features)
+
+    recommends
+
+    return recommends
