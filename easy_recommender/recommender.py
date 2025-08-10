@@ -41,7 +41,7 @@ def build_feature_data(df: pd.DataFrame, target_column_name: str) -> List[Tuple[
         result.append((id, features))
     return result
 
-def preprocess(df: pd.DataFrame, user_features: List[str], item_features: List[str]) -> Tuple[List[int], List[int], List[str], List[str]]:
+def process_df(df: pd.DataFrame, user_features: List[str], item_features: List[str]) -> Tuple[List[int], List[int], List[str], List[str]]:
     """
     Preprocess the input data for the recommender system.
     This function is a placeholder and should be implemented as needed.
@@ -95,16 +95,22 @@ def preprocess(df: pd.DataFrame, user_features: List[str], item_features: List[s
     user_features = dataset.build_user_features(user_features_data)
     item_features = dataset.build_item_features(item_features_data)
 
+    return data, user_features, item_features
+
 def recommend(df: pd.DataFrame, user_features: List[str], item_features: List[str]) -> List[int]:
     """
     Generate recommendations for users based on their features and item features.
     """
     df = df.copy()
 
-    preprocessed_df = preprocessed_df(df, user_features, item_features)
+    data, user_features, item_features = process_df(df, user_features, item_features)
 
     # モデルの作成
     model = LightFM(no_components=100, loss="warp", random_state=123)
+
+    dataset = Dataset()
+    interactions = dataset.build_interactions(data)
+
 
     # 学習
     recommends = model.fit(interactions=interactions, user_features=user_features, item_features=item_features)
