@@ -19,6 +19,9 @@ jupyter = "^1.0.0"
 ipykernel = "^6.0.0"
 jupyterlab = "^4.0.0"
 
+[tool.poetry.scripts]
+sandbox2 = "sandbox2:main"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
