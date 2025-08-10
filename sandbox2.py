@@ -8,6 +8,10 @@ def main():
     df = pd.read_csv(f"{dataset_path}movielens_combined.csv")
     print(df.head())
 
+    # Define user and item features based on the dataset columns
+    user_features = ['user_age', 'user_gender', 'user_occupation']
+    item_features = ['item_genres']
+    
     res = recommend(df, user_features, item_features)
     print(res)
 
