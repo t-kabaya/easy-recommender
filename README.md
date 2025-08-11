@@ -1,5 +1,9 @@
 # Easy Recommender
 
+⚠️ **This package is currently broken and under repair. Please do not use.** ⚠️
+
+**This project only works with Python 3.11.11 because LightFM requires this specific version. Other versions are not supported.**
+
 A simple and efficient recommendation system library using implicit collaborative filtering and LightFM.
 
 ## Features
