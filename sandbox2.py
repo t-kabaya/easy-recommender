@@ -13,7 +13,7 @@ def main():
     item_features = ['item_genres']
     
     res = recommend(df, user_features, item_features)
-    print(res)
+    print('recommends: ', res)
 
 if __name__ == "__main__":
     main()
