@@ -3,3 +3,23 @@
 /ml-1m
 /venv
 .pypirc
+
+# データセット
+/datasets/
+*.csv
+
+# ビルド成果物
+/dist/
+/build/
+*.egg-info/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.idea/
